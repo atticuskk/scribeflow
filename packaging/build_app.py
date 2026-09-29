@@ -56,25 +56,34 @@ def write_info_plist(template: Path, target: Path, *, version: str, build: str) 
     return info
 
 
-def check_environment(output_root: Path) -> None:
+XCODE_HINT = "请安装完整 Xcode，或设置 DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer 后重试。"
+
+
+def check_environment(output_root: Path) -> bool:
+    """检查构建环境；返回是否只有 Command Line Tools（没有完整 Xcode）。"""
+
     if platform.system() != "Darwin" or platform.machine() != "arm64":
         raise RuntimeError("只能在 Apple Silicon Mac 上构建应用。")
     applications = Path("/Applications")
     if output_root == applications or applications in output_root.parents:
         raise RuntimeError("构建输出不能位于 /Applications；请在 dist 中构建后手动安装。")
-    developer_dir = os.environ.get("DEVELOPER_DIR") or run(["xcode-select", "-p"], capture_output=True).stdout.strip()
-    if developer_dir.endswith("/CommandLineTools"):
-        raise RuntimeError(
-            "构建 SwiftUI 应用需要完整 Xcode（当前只有 CommandLineTools）。"
-            "请安装 Xcode，或设置 DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer。"
-        )
     if shutil.which("uv") is None:
         raise RuntimeError("需要 uv：https://docs.astral.sh/uv/")
+    developer_dir = os.environ.get("DEVELOPER_DIR") or run(["xcode-select", "-p"], capture_output=True).stdout.strip()
+    clt_only = developer_dir.rstrip("/").endswith("/CommandLineTools")
+    if clt_only:
+        print("警告：只检测到 Command Line Tools，将尝试直接编译；若失败，" + XCODE_HINT, flush=True)
+    return clt_only
 
 
-def build_swift() -> Path:
+def build_swift(*, clt_only: bool = False) -> Path:
     base = ["swift", "build", "-c", "release", "--arch", "arm64", "--package-path", str(ROOT / "app")]
-    run([*base, "--product", EXECUTABLE])
+    try:
+        run([*base, "--product", EXECUTABLE])
+    except subprocess.CalledProcessError as exc:
+        if clt_only:
+            raise RuntimeError("仅用 Command Line Tools 编译界面失败。" + XCODE_HINT) from exc
+        raise
     bin_dir = run([*base, "--show-bin-path"], capture_output=True).stdout.strip()
     return Path(bin_dir) / EXECUTABLE
 
@@ -145,7 +154,7 @@ def smoke_test(python: Path, site_packages: Path) -> dict[str, str]:
 
 
 def build(output_root: Path, python_runtime: Path) -> Path:
-    check_environment(output_root)
+    clt_only = check_environment(output_root)
     version = project_version()
     output_root.mkdir(parents=True, exist_ok=True)
     staging = output_root / f".{APP_NAME}.staging-{uuid.uuid4().hex[:8]}"
@@ -159,7 +168,7 @@ def build(output_root: Path, python_runtime: Path) -> Path:
             directory.mkdir(parents=True)
 
         print("编译 SwiftUI 界面…", flush=True)
-        shutil.copy2(build_swift(), contents / "MacOS" / EXECUTABLE)
+        shutil.copy2(build_swift(clt_only=clt_only), contents / "MacOS" / EXECUTABLE)
         build_number = datetime.now().strftime("%Y%m%d%H%M")
         info = write_info_plist(PACKAGING / "Info.plist", contents / "Info.plist", version=version, build=build_number)
         make_icon(PACKAGING / "AppIcon-Source.png", resources / "AppIcon.icns", work)

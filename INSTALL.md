@@ -25,7 +25,7 @@
 
 ## 从源码构建
 
-需要完整 Xcode（仅 Command Line Tools 不够，SwiftUI 宏依赖 Xcode）和 [uv](https://docs.astral.sh/uv/getting-started/installation/)：
+推荐安装完整 Xcode；只有 Command Line Tools 时脚本会给出警告并尝试编译，失败再安装 Xcode。另外需要 [uv](https://docs.astral.sh/uv/getting-started/installation/)：
 
 ```bash
 git clone https://github.com/atticuskk/scribeflow.git
