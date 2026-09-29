@@ -1,16 +1,16 @@
-import XCTest
+import Foundation
+import Testing
 @testable import ScribeFlowCore
 
-final class LineBufferTests: XCTestCase {
-    func testReassemblesSplitMultibyteLines() {
-        let bytes = Array("第一行\n第二行\n尾".utf8)
+struct LineBufferTests {
+    @Test func reassemblesSplitMultibyteLines() {
         var buffer = LineBuffer()
         var lines: [String] = []
-        for byte in bytes {
+        for byte in Array("第一行\n第二行\n尾".utf8) {
             lines += buffer.append(Data([byte]))
         }
-        XCTAssertEqual(lines, ["第一行", "第二行"])
-        XCTAssertEqual(buffer.finish(), ["尾"])
-        XCTAssertEqual(buffer.finish(), [])
+        #expect(lines == ["第一行", "第二行"])
+        #expect(buffer.finish() == ["尾"])
+        #expect(buffer.finish().isEmpty)
     }
 }

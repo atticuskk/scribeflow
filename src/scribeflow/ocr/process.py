@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import os
 import signal
 import subprocess
 import threading
+import time
 from collections import deque
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
@@ -18,10 +20,10 @@ class ProcessResult:
     tail: tuple[str, ...]
 
 
-def popen_group(command: Sequence[str], *, env: dict[str, str]) -> subprocess.Popen[str]:
+def popen_group(command: Sequence[str], *, env: dict[str, str], stdin_pipe: bool = False) -> subprocess.Popen[str]:
     return subprocess.Popen(
         list(command),
-        stdin=subprocess.DEVNULL,
+        stdin=subprocess.PIPE if stdin_pipe else subprocess.DEVNULL,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,
@@ -32,10 +34,12 @@ def popen_group(command: Sequence[str], *, env: dict[str, str]) -> subprocess.Po
     )
 
 
-def terminate_group(process: subprocess.Popen[str], *, grace_seconds: float = 10.0) -> None:
+def terminate_group(process: subprocess.Popen[str], *, grace_seconds: float = 3.0) -> None:
+    """立即结束整个进程组：先 SIGTERM，宽限期后 SIGKILL。用于取消和异常路径。"""
+
     if process.poll() is not None:
         return
-    for sig, wait in ((signal.SIGTERM, grace_seconds), (signal.SIGKILL, 5.0)):
+    for sig, wait in ((signal.SIGTERM, grace_seconds), (signal.SIGKILL, 3.0)):
         try:
             os.killpg(process.pid, sig)
         except ProcessLookupError:
@@ -45,6 +49,36 @@ def terminate_group(process: subprocess.Popen[str], *, grace_seconds: float = 10
             return
         except subprocess.TimeoutExpired:
             continue
+
+
+def _group_alive(pgid: int) -> bool:
+    try:
+        os.killpg(pgid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
+def close_gracefully(process: subprocess.Popen[str], *, timeout: float = 30.0, drain: float = 5.0) -> None:
+    """关闭 stdin 请进程自行退出（MinerU 服务的官方关闭方式），
+    让它和它的子进程（如 multiprocessing 的 resource_tracker）有机会清理资源；超时再强制结束。"""
+
+    if process.stdin is not None:
+        with contextlib.suppress(OSError):
+            process.stdin.close()
+    try:
+        process.wait(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        terminate_group(process)
+        return
+    deadline = time.monotonic() + drain
+    while _group_alive(process.pid) and time.monotonic() < deadline:
+        time.sleep(0.1)
+    if _group_alive(process.pid):
+        with contextlib.suppress(ProcessLookupError):
+            os.killpg(process.pid, signal.SIGKILL)
 
 
 def run_streaming(

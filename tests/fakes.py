@@ -165,8 +165,18 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, *args):
         pass
 
+server = HTTPServer((args.host, args.port), Handler)
+if os.environ.get("MINERU_API_SHUTDOWN_ON_STDIN_EOF") == "1":
+    import sys, threading
+
+    def watch_stdin():
+        sys.stdin.read()
+        (state / "server-graceful.txt").open("a").write(f"{os.getpid()}\n")
+        server.shutdown()
+
+    threading.Thread(target=watch_stdin, daemon=True).start()
 print("fake mineru-api listening", flush=True)
-HTTPServer((args.host, args.port), Handler).serve_forever()
+server.serve_forever()
 """
 
 

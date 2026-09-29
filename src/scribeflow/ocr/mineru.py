@@ -27,7 +27,7 @@ from scribeflow.domain import Block
 from scribeflow.errors import ErrorCode, OcrError
 from scribeflow.ocr.engine import OcrSettings, SegmentJob
 from scribeflow.ocr.mineru_format import find_content_list, load_blocks
-from scribeflow.ocr.process import popen_group, pump_output, run_streaming, terminate_group
+from scribeflow.ocr.process import close_gracefully, popen_group, pump_output, run_streaming, terminate_group
 
 logger = logging.getLogger(__name__)
 
@@ -91,9 +91,11 @@ class MinerUServer:
             **self._env,
             "MINERU_API_OUTPUT_ROOT": self._output_root.name,
             "MINERU_API_DISABLE_ACCESS_LOG": "1",
+            "MINERU_API_SHUTDOWN_ON_STDIN_EOF": "1",  # 关闭 stdin 即请求服务正常退出
         }
         logger.info("启动 MinerU 服务：%s", self.url)
-        self._process = popen_group([*self._command, "--host", "127.0.0.1", "--port", str(port)], env=env)
+        command = [*self._command, "--host", "127.0.0.1", "--port", str(port)]
+        self._process = popen_group(command, env=env, stdin_pipe=True)
         pump_output(self._process, logging.getLogger("scribeflow.mineru"), "MinerU 服务")
         self._wait_until_healthy()
 
@@ -114,9 +116,15 @@ class MinerUServer:
             time.sleep(1.0)
         raise OcrError(f"等待 MinerU 服务就绪超时：{last_error}", code=ErrorCode.OCR_SERVER)
 
-    def stop(self) -> None:
+    def stop(self, *, graceful: bool = False) -> None:
+        """正常结束时请服务自行退出；取消或出错时立即结束整个进程组。"""
+
         if self._process is not None:
-            terminate_group(self._process)
+            if graceful and self.running:
+                logger.info("关闭 MinerU 服务")
+                close_gracefully(self._process)
+            else:
+                terminate_group(self._process)
             self._process = None
         if self._output_root is not None:
             self._output_root.cleanup()
@@ -149,7 +157,7 @@ class MinerUEngine:
         tb: TracebackType | None,
     ) -> None:
         if self._server is not None:
-            self._server.stop()
+            self._server.stop(graceful=exc_type is None)
 
     def diagnostics(self) -> dict[str, str]:
         return {

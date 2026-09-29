@@ -97,6 +97,8 @@ def test_convert_uses_one_shared_mineru_server(harness: Harness) -> None:
     assert {call["model_source"] for call in calls} == {"modelscope"}
     assert len(harness.server_pids()) == 1
     assert not alive(harness.server_pids()[0])
+    graceful = harness.state / "server-graceful.txt"
+    assert graceful.read_text().split() == [str(harness.server_pids()[0])]  # 通过关闭 stdin 正常退出
     assert "fake mineru client done" in stderr  # MinerU 输出进入日志（stderr）
     diagnostics = next(e for e in events if e["event"] == "diagnostics")
     assert diagnostics["values"]["服务"].startswith("http://127.0.0.1:")
@@ -164,6 +166,7 @@ def test_sigterm_cancels_and_leaves_no_processes(harness: Harness) -> None:
     time.sleep(0.2)
     assert not alive(client_pid)
     assert not any(alive(pid) for pid in harness.server_pids())
+    assert not (harness.state / "server-graceful.txt").exists()  # 取消时立即结束，不等待正常退出
 
 
 def test_ai_without_configuration_fails_fast(harness: Harness) -> None:

@@ -1,8 +1,9 @@
-import XCTest
+import Foundation
+import Testing
 @testable import ScribeFlowCore
 
-final class BackendCommandTests: XCTestCase {
-    func testConvertArguments() {
+struct BackendCommandTests {
+    @Test func convertArguments() {
         var options = ConversionOptions()
         options.overwrite = true
         options.chapterLevel = 2
@@ -13,25 +14,25 @@ final class BackendCommandTests: XCTestCase {
             output: URL(fileURLWithPath: "/书/民法 讲义-Markdown"),
             options: options
         )
-        XCTAssertEqual(command.arguments, [
+        #expect(command.arguments == [
             "-m", "scribeflow", "convert", "/书/民法 讲义.pdf", "--output", "/书/民法 讲义-Markdown",
             "--segment-pages", "16", "--lang", "ch", "--model-source", "modelscope",
             "--overwrite", "--discard-ocr-output", "--chapter-level", "2", "--no-cross-page-merge",
             "--events", "jsonl",
         ])
-        XCTAssertEqual(command.environment, [:])
+        #expect(command.environment.isEmpty)
     }
 
-    func testAIKeyGoesToEnvironmentNotArguments() {
+    @Test func aiKeyGoesToEnvironmentNotArguments() {
         var options = ConversionOptions()
         options.ai = AIOptions(model: "gpt-test", baseURL: " https://example.com/v1 ", apiKey: "sk-secret")
         let command = BackendCommand.reprocess(output: URL(fileURLWithPath: "/out"), options: options)
-        XCTAssertEqual(command.arguments, [
+        #expect(command.arguments == [
             "-m", "scribeflow", "reprocess", "/out",
             "--ai", "--ai-model", "gpt-test", "--ai-base-url", "https://example.com/v1",
             "--events", "jsonl",
         ])
-        XCTAssertFalse(command.arguments.contains("sk-secret"))
-        XCTAssertEqual(command.environment, ["SCRIBEFLOW_AI_API_KEY": "sk-secret"])
+        #expect(!command.arguments.contains("sk-secret"))
+        #expect(command.environment == ["SCRIBEFLOW_AI_API_KEY": "sk-secret"])
     }
 }

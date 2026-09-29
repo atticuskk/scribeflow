@@ -55,6 +55,7 @@ flowchart LR
 
 MinerU 3.4.4 的 `mineru` 命令在没有 `--api-url` 时，每次都会启动并关闭一个临时 `mineru-api` 服务，模型随之重新加载。ScribeFlow 在任务开始时启动一个服务（`python -m mineru.cli.fast_api --host 127.0.0.1 --port <空闲端口>`），等待 `/health` 返回 healthy，然后每段调用 `mineru … --api-url <服务地址>`。服务端在进程内以线程执行任务，模型单例常驻，所以整本书只加载一次模型。
 
+- 正常结束时关闭服务的 stdin（设置 `MINERU_API_SHUTDOWN_ON_STDIN_EOF=1`，与 MinerU 自带客户端的做法一致），让服务及其子进程自行清理；30 秒内未退出才强制结束。取消或出错时立即结束整个进程组。
 - 客户端输出 `Failed to query task status`，或服务进程已退出时，重启服务并重试该分段一次。
 - 客户端输出 `Timed out waiting for result of task` 时报 `ocr_timeout`。单段超时默认 `max(3600, 300 × 页数)` 秒；设置了 `MINERU_TASK_RESULT_TIMEOUT_SECONDS` 时以它为准。
 - `--no-shared-server` 退回每段临时服务的旧行为。
@@ -89,4 +90,4 @@ MinerU 3.4.4 的 `mineru` 命令在没有 `--api-url` 时，每次都会启动�
 
 - `tests/test_cli.py`：以子进程运行真实 CLI，并用伪造的 `mineru` / `mineru-api` 程序覆盖共享服务、服务崩溃重启、失败续跑、SIGTERM 取消（确认不留下子进程）。
 - `tests/test_converter.py`：进程内伪造引擎；`tests/fixtures/expected/` 是 6 页样例书的期望输出。清洗或渲染行为有意改变时，用 `UPDATE_GOLDEN=1 uv run pytest tests/test_converter.py` 更新并检查差异。
-- `app/Tests`：协议解码、命令参数、行缓冲、状态机、进程运行与取消。
+- `app/Tests`（swift-testing，只装 Command Line Tools 也能运行 `swift test`）：协议解码、命令参数、行缓冲、状态机、进程运行与取消。
