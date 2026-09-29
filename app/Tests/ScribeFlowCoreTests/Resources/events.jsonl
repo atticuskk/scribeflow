@@ -1,0 +1,9 @@
+{"event": "stage", "stage": "prepare", "message": "正在检查 PDF"}
+{"event": "started", "input": "/书/民法.pdf", "output": "/书/民法-Markdown", "page_count": 480, "segment_count": 30, "resumed": true, "version": 1}
+{"event": "segment", "index": 1, "count": 30, "start_page": 1, "end_page": 16, "state": "skipped"}
+{"event": "diagnostics", "section": "ocr", "values": {"引擎": "MinerU", "服务": "http://127.0.0.1:50123"}}
+{"event": "segment", "index": 2, "count": 30, "start_page": 17, "end_page": 32, "state": "running"}
+{"event": "segment", "index": 2, "count": 30, "start_page": 17, "end_page": 32, "state": "done"}
+{"event": "completed", "output": "/书/民法-Markdown", "document": "/书/民法-Markdown/document.md", "markdown_files": 13, "chapters": 12, "log": "/书/民法-Markdown/.scribeflow/logs/20260929-101500-convert.log", "warnings": ["有 1 页没有识别到任何内容（第 5 页），请确认是否为空白页。"]}
+{"event": "failed", "code": "ocr_server", "message": "MinerU 服务不可用，通常与内存不足有关。", "resumable": true, "log": "/书/.民法-Markdown.scribeflow-work/run.log"}
+{"event": "failed", "code": "invalid_input", "message": "找不到输入文件：/x.pdf", "resumable": false, "log": null}

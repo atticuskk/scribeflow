@@ -8,10 +8,9 @@ license and this project's MIT license are included there as well.
 
 | Component | Use in this project | License | Source |
 | --- | --- | --- | --- |
-| MinerU 3.4.4 | Local OCR and layout analysis | MinerU Open Source License (Apache-2.0 with additional terms) | https://github.com/opendatalab/MinerU |
+| MinerU 3.4.4 (optional `ocr` extra; bundled in the app) | Local OCR and layout analysis | MinerU Open Source License (Apache-2.0 with additional terms) | https://github.com/opendatalab/MinerU |
 | OpenAI Python | Optional OpenAI-compatible AI cleaning client | Apache-2.0 | https://github.com/openai/openai-python |
 | pypdf | PDF page inspection and splitting | BSD-3-Clause | https://github.com/py-pdf/pypdf |
-| python-dotenv | Optional local environment loading | BSD-3-Clause | https://github.com/theskumar/python-dotenv |
 
 ## MinerU notice
 

@@ -1,194 +1,91 @@
-# ScribeFlow：扫描版 PDF 转 Markdown
+# ScribeFlow
 
-在 macOS 本地调用 MinerU 识别扫描版 PDF，再以“块级操作”完成保真清洗，保留标题、正文、表格和图片，并按章节输出多个 Markdown 文件。
+把**扫描版 PDF** 转成**按章节拆分的 Markdown**。OCR 在本机用 [MinerU](https://github.com/opendatalab/MinerU) 完成，随后的清洗只做“删除 / 合并 / 调整标题层级”三类块级操作，**不改写正文**，每一处改动都有审计记录。
+
+- macOS 桌面应用（Apple Silicon）：拖入 PDF → 开始转换 → 得到章节 Markdown
+- 命令行：`scribeflow convert` / `scribeflow reprocess`
+- 适合四五百页的厚书：分段 OCR、断点续跑、整本书只加载一次模型
 
 ## 功能
 
-- 强制 OCR 或自动判断 PDF 类型
-- 删除 MinerU 标记的页眉、页脚和页码
-- 规则删除明确的广告、推广文字和独立页码
-- 可选使用 AI 判断广告、断句合并和标题层级；默认关闭
-- AI 只能返回块 ID 操作，不能重写、润色或替换正文
-- 保留 MinerU 提取的图片，并修复完整文档和章节文件中的相对链接
-- 根据标题层级自动拆分章节
-- 输出运行日志、清洗审计、运行清单和 MinerU 原始结果
-- 使用暂存目录和原子发布，避免失败时留下“看似成功”的半成品
-- 根据 PDF 页数自动放宽 MinerU 任务超时：最少 4 小时、每页预留 60 秒、最长 24 小时
-- 厚文档自动降低 MinerU 单批页数，减少内存峰值及本地 OCR 服务重启
-- 默认按 16 页分段顺序 OCR，每段完成后保存 checkpoint，支持失败后续跑
-- 校验页码覆盖、分段状态、输入哈希和资源引用，全部完成后才发布最终目录
+| | |
+|---|---|
+| OCR | MinerU `pipeline` 后端，默认中文、ModelScope 模型源；每 16 页一段顺序识别 |
+| 续跑 | 每段完成即保存；失败或停止后再次转换同一个输出位置会自动跳过已完成分段 |
+| 清洗规则 | 删除页眉页脚页码、独立页码、短广告；合并英文断词、被分页截断的中文句子 |
+| AI 清洗（可选，默认关闭） | OpenAI 兼容接口；只能提议块级操作，程序逐条校验后执行 |
+| 重新生成 | 换章节层级、开关规则或 AI 后，复用已有 OCR 结果几秒内重新生成 |
+| 输出 | 完整文档、章节文件、图片，以及 manifest / 审计 / OCR 块 / 日志 |
 
-## 环境
+## 使用桌面应用
 
-当前项目使用：
+1. 把 PDF 拖进窗口（输出位置默认是 PDF 所在文件夹，可更改）。
+2. 选择章节切分方式，点击“开始转换”。
+3. 完成后可直接打开文件夹或完整文档；想换一种章节切分，调整后点“按当前选项重新生成”。
 
-- Python 3.12
-- MinerU 3.4.4
-- macOS Apple Silicon
-- 默认模型源：ModelScope
+失败时窗口会给出对应操作：继续转换、替换已有结果、放弃旧进度重新开始。OCR 语言、每段页数、模型源、AI 服务和开发者诊断在“设置”（⌘,）里。
 
-## 从源码构建 macOS 桌面应用
+安装预构建应用或从源码构建，见 [INSTALL.md](INSTALL.md)。
 
-GitHub Releases 提供包含独立 Python 运行时和依赖的 Apple Silicon 应用 ZIP；安装步骤、系统验证边界及首次模型下载见 [INSTALL.md](INSTALL.md)。模型不随包分发。
-
-从源码构建时，请先完成依赖安装，并准备完整 Xcode 与独立 Python 3.12 运行时。构建只输出到 `dist/`，不删除已安装的应用。
-
-```text
-uv sync
-uv run python macos/build_app.py
-```
-
-构建完成后，应用位于 `dist/ScribeFlow.app`。双击应用后，把扫描版 PDF 拖入窗口、选择输出目录，再点击“开始转换”即可。应用会显示 OCR、章节分析和 Markdown 生成状态；成功后自动打开输出文件夹，并显示 Markdown 与章节数量。失败时可直接在窗口中查看错误日志。
-
-应用已内置 Python 3.12、MinerU 和项目后端，不依赖本项目的 `.venv`，日常使用无需打开终端。OCR 模型沿用当前用户的 ModelScope 缓存；新机器第一次使用时需要联网下载模型。
-
-若自动识别的 Python 运行时不符合要求，可显式指定：
+## 命令行
 
 ```bash
-uv run python macos/build_app.py --python-runtime /path/to/python-3.12-runtime
+uv sync --extra ocr                      # 安装 ScribeFlow 与 MinerU
+uv run scribeflow convert 书.pdf -o 书-Markdown
+uv run scribeflow reprocess 书-Markdown --chapter-level 2
 ```
 
-构建脚本会编译 SwiftUI、复制独立运行时、生成图标、执行本地代码签名，并将成品原子发布到 `dist/`。
+常用参数：
 
-激活虚拟环境：
+| 参数 | 作用 |
+|---|---|
+| `--segment-pages N` | 每段页数，默认 16 |
+| `--overwrite` | 替换 ScribeFlow 之前生成的同名输出（不会替换其他目录） |
+| `--fresh` | 放弃该输出位置的未完成任务，重新开始 |
+| `--chapter-level 1-6` | 在第几级标题处切分章节，默认自动 |
+| `--no-cross-page-merge` | 不合并分页截断的中文句子 |
+| `--ai --ai-model M [--ai-base-url URL]` | 启用 AI 清洗；密钥来自 `SCRIBEFLOW_AI_API_KEY` 或 `OPENAI_API_KEY` |
+| `--lang` / `--model-source` / `--method` / `--backend` | 传给 MinerU |
+| `--no-shared-server` | 每段单独启动 MinerU（旧方式，较慢） |
+| `--events jsonl` | 向 stdout 输出 JSON Lines 进度事件（桌面应用使用） |
 
-```bash
-source .venv/bin/activate
-```
-
-## AI 配置
-
-复制环境变量示例：
-
-```bash
-cp .env.example .env
-```
-
-编辑 `.env`：
-
-```dotenv
-PDF2MD_AI_MODEL=你的模型名称
-PDF2MD_AI_API_KEY=你的密钥
-PDF2MD_AI_BASE_URL=https://你的兼容接口/v1
-```
-
-`PDF2MD_AI_BASE_URL` 可省略，省略时使用 OpenAI 默认接口。也兼容 `OPENAI_API_KEY`、`OPENAI_BASE_URL` 和 `OPENAI_MODEL`。
-
-密钥不会写入日志、清洗审计或输出清单。
-
-启用 AI 清洗时，待处理 PDF 的内容块会发送给你配置的 OpenAI 或兼容服务。请仅处理你有权发送给该服务的内容，并在启用前确认服务的数据处理政策。
-
-## 一条命令运行完整流水线
-
-```bash
-.venv/bin/python scripts/convert_pdf.py \
-  "/绝对路径/输入.pdf" \
-  --output "/绝对路径/输出文件夹"
-```
-
-启用在线 AI 时必须显式添加 `--use-ai` 并配置模型和密钥：
-
-```bash
-.venv/bin/python scripts/convert_pdf.py \
-  "/绝对路径/输入.pdf" \
-  --output "/绝对路径/输出文件夹" \
-  --use-ai \
-  --ai-model "模型名称"
-```
-
-长文档默认每段 16 页；可用 `--segment-pages 8` 等值调整。任务中断后使用相同输入、输出目录和分段大小加 `--resume`，程序会跳过已完成分段。
-
-重复运行并安全替换该工具上次生成的输出：
-
-```bash
-.venv/bin/python scripts/convert_pdf.py \
-  "/绝对路径/输入.pdf" \
-  --output "/绝对路径/输出文件夹" \
-  --overwrite
-```
-
-默认参数适合中文扫描件：
-
-```text
-backend      pipeline
-method       ocr
-lang         ch
-model-source modelscope
-```
-
-查看全部参数：
-
-```bash
-.venv/bin/python scripts/convert_pdf.py --help
-```
-
-安装项目后也可以使用：
-
-```bash
-.venv/bin/pdf2md input.pdf -o output/book
-```
+`MINERU_TASK_RESULT_TIMEOUT_SECONDS`、`MINERU_PROCESSING_WINDOW_SIZE` 等 MinerU 环境变量会原样传递。
 
 ## 输出结构
 
 ```text
-指定输出文件夹/
-├── document.md              # 清洗后的完整文档
-├── chapters/                # 按章节拆分的 Markdown
-│   ├── 001-第一章.md
-│   └── 002-第二章.md
-├── assets/                  # MinerU 提取的图片
-├── raw/mineru/              # MinerU 原始结果，便于排错和追溯
-├── job_manifest.json        # 分段 checkpoint、页码范围、耗时和恢复状态
-├── cleaning_audit.json      # 每次删除、合并、层级调整的原因和原文
-├── manifest.json            # 输入、参数、章节和产物清单
-└── logs/pipeline.log        # 完整日志
+书-Markdown/
+├── document.md            完整文档
+├── chapters/              001-第一章-总则.md …
+├── assets/                图片（按 OCR 分段分目录）
+└── .scribeflow/
+    ├── manifest.json      输入、参数、章节、统计、警告
+    ├── audit.json         每一项删除/合并/层级调整，以及被拒绝的操作
+    ├── blocks.jsonl       OCR 得到的全部内容块（重新生成的依据）
+    ├── logs/              每次转换、重新生成的日志
+    └── ocr/               MinerU 原始结果（可在设置中关闭）
 ```
 
-使用 `--discard-raw` 可在成功后删除 `raw/`，不影响最终 Markdown 和图片。
+转换过程中，进度保存在输出位置旁边的 `.<输出名>.scribeflow-work/`，成功发布后自动删除。
 
-## 保真原则
+## 保真与隐私
 
-AI 收到带 ID 的内容块，只能返回：
+- 正文只来自 OCR 内容块；规则和 AI 都没有“替换文本”的能力。
+- AI 默认关闭。开启后，内容块会发送到你配置的服务，请只处理你有权发送的内容。
+- API 密钥在应用中保存于钥匙串，在命令行中只从环境变量读取；不会写入日志、事件或 manifest。
+- 本工具不授予你处理任何第三方 PDF 的权利。基于 MinerU 对外提供服务时，请遵守 MinerU 许可证的标注要求。
 
-- `drop_ids`：页眉、页脚、页码、广告或推广块
-- `merge_groups`：需要合并的相邻断句
-- `heading_levels`：已有标题的层级调整
+## 开发
 
-AI 响应中没有“替换正文”字段。程序还会验证块 ID、相邻关系、标题类型和层级范围；无效操作会被忽略。所有有效操作记录在 `cleaning_audit.json`，便于逐条复核。
-
-## 版权与许可
-
-本项目源码按 [MIT License](LICENSE) 发布。依赖及其许可证见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
-
-本工具不授予你处理、上传或分发任何第三方 PDF、图片、OCR 输出或模型文件的权利。请只转换你拥有版权、获得授权或依法可以处理的文件。若你基于 MinerU 向第三方提供在线服务，应按 MinerU 的许可要求在界面或公开文档中清晰标注其使用情况。
-
-## 错误处理
-
-- 缺少输入或 MinerU CLI 时，在执行前给出明确错误；AI 仅在 `--use-ai` 时检查配置。
-- MinerU 或 AI 请求失败时返回非零退出码。
-- 失败现场保存为 `输出文件夹.failed-时间戳/`，其中包含 checkpoint、日志和已产生的原始文件；可用 `--resume` 继续。
-- 已存在的输出目录默认不会覆盖；只有显式传入 `--overwrite` 才会替换。
-
-## 测试
+架构、事件协议和测试方式见 [docs/architecture.md](docs/architecture.md)，变更记录见 [CHANGELOG.md](CHANGELOG.md)。
 
 ```bash
-.venv/bin/python -m unittest discover -s tests -v
+uv sync                    # 开发环境（不含 MinerU）
+uv run pytest              # 包括用伪造 MinerU 的端到端测试
+uv run ruff check . && uv run mypy
+cd app && swift test       # macOS 应用核心逻辑
 ```
 
-生成 300/500 页连续压力样本（只重复源 PDF 第一页，用于耐久性和恢复测试）：
+## 许可
 
-```bash
-.venv/bin/python scripts/generate_stress_pdf.py samples/mineru_smoke_test.pdf /tmp/ocr-300.pdf --pages 300
-```
-
-## 文档与开发者模式
-
-完整技术文档位于 [`docs/README.md`](docs/README.md)，中文技术白皮书源文件为
-[`docs/whitepaper.md`](docs/whitepaper.md)。文档门禁和白皮书生成命令：
-
-```bash
-.venv/bin/python scripts/check_docs.py
-.venv/bin/python scripts/build_whitepaper_pdf.py
-```
-
-在 macOS 应用的“转换设置”中开启“开发者模式”，即可实时查看当前 OCR/AI 模型、模型源、路径可见性、运行参数和版本信息。API 密钥不会进入诊断事件、日志或 manifest。
+MIT，见 [LICENSE](LICENSE)。依赖许可见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
