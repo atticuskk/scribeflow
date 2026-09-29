@@ -41,13 +41,16 @@ public final class BackendProcess: @unchecked Sendable {
             let buffer = BufferBox()
             pipe.fileHandleForReading.readabilityHandler = { handle in
                 let data = handle.availableData
+                // 到达 EOF 后系统可能继续以空数据回调，必须立即解除并且只结束一次。
+                if data.isEmpty { handle.readabilityHandler = nil }
                 queue.async {
+                    guard !buffer.finished else { return }
                     let lines = data.isEmpty ? buffer.value.finish() : buffer.value.append(data)
                     for line in lines {
                         if let output = transform(line) { continuation.yield(output) }
                     }
                     if data.isEmpty {
-                        handle.readabilityHandler = nil
+                        buffer.finished = true
                         group.leave()
                     }
                 }
@@ -91,4 +94,5 @@ public final class BackendProcess: @unchecked Sendable {
 /// 只在串行队列上访问的行缓冲。
 private final class BufferBox: @unchecked Sendable {
     var value = LineBuffer()
+    var finished = false
 }

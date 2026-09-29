@@ -1,49 +1,53 @@
-# ScribeFlow 安装与恢复
+# 安装与构建
 
-仓库：https://github.com/jasperfarmer6-maker/scribeflow （公开）
-发布：https://github.com/jasperfarmer6-maker/scribeflow/releases/tag/backup-2026-09-05
-应用附件：`ScribeFlow-backup-2026-09-05-macos-arm64.zip`
+## 系统要求
 
-## 新电脑要求与验证边界
+- Apple Silicon（M 系列）Mac，macOS 15.0 或更高（打包的依赖要求 15.0）。
+- 首次转换需要联网下载 OCR 模型（默认从 ModelScope），模型缓存在当前用户目录；建议预留至少 10 GB 空间。
+- 可选的 AI 清洗需要一个 OpenAI 兼容服务。
 
-- Apple Silicon（M 系列）Mac；**本安装包最低要求 macOS 15.0**，来自已打包依赖的 Mach-O 最低系统声明。仅在 macOS 27.0 上完成本次验证；没有在其他系统版本或另一台电脑实测。
-- 应用内含 Python 3.12 与运行依赖；安装预构建 ZIP 不需要项目目录、虚拟环境或 Xcode。
-- 本版本采用本地 ad-hoc 签名，没有 Apple Developer ID 公证。只从自己的 GitHub 仓库下载并核对校验和；首次打开若被拦截，在系统设置 → 隐私与安全性查看对应应用的“仍要打开”。不要关闭系统安全检查。
+## 安装预构建应用
 
-## 下载与安装
+1. 从仓库的 Releases 下载应用 ZIP 和 `SHA256SUMS.txt`。
+2. 在下载目录运行 `shasum -a 256 -c SHA256SUMS.txt`，确认显示 `OK`。
+3. 解压，把 `ScribeFlow.app` 拖到“应用程序”。
+4. 应用使用本地 ad-hoc 签名，没有经过 Apple 公证。首次打开若被拦截，到“系统设置 → 隐私与安全性”选择“仍要打开”。不要关闭系统安全检查。
 
-1. 打开仓库的 Releases，选择 `backup-2026-09-05`，下载应用 ZIP 与 `SHA256SUMS.txt`。私有仓库需要先登录有权限的 GitHub 账号。
-2. 在下载目录运行 `shasum -a 256 -c SHA256SUMS.txt`，确认应用 ZIP 显示 `OK`（同时下载校验清单列出的安装说明）。
-3. 解压 ZIP，将 `.app` 拖到“应用程序”目录。已有同名应用时，先将旧副本保存到备份目录，再安装新副本。
-4. 模型准备好后选择自己的输入文件和独立输出目录。安装包不包含任何个人媒体、转换结果或 API 密钥。
+不要修改应用包内的文件，否则签名会失效。应用改名或放在含空格、中文的路径下不影响运行。
 
-## 备份内容与恢复边界
+### 从 0.1.x 升级
 
-- 源码与历史在 Git 仓库中；应用 ZIP、说明和校验文件在 Releases 中。
-- `Contents/Resources/BuildInfo.json` 记录构建对应的源码提交；`Licenses/` 包含依赖清单和许可文件，依赖包原始许可也保留在运行时中。
-- 不包含个人 PDF/视频、处理结果、任务历史、模型缓存、`.env`、钥匙串密钥或其他电脑数据。
-- 尚需的模型在新电脑重新下载。若要保留以前的任务或结果，需要另行备份自己的数据；本次没有删除或迁移这些数据。
-- 应用改名、路径中含空格或中文不应影响包内 Python 启动。不要自行改动 Bundle 内部文件，以免破坏签名。
+0.2.0 的 Bundle ID 已变化，会作为一个新应用出现：
 
-## OCR 模型与可选 AI
-
-本程序使用 MinerU，默认模型源为 ModelScope，首次转换需要联网获取模型；缓存位于当前用户目录。模型体积与所需识别组件有关，建议预留至少 10 GB 供模型、下载缓存和任务临时文件使用。模型准备好后，关闭可选在线 AI 即可在本机处理。
-
-可选 AI 默认关闭。旧电脑钥匙串中的 API 密钥和 `.env` 不会随程序备份；需要时在新电脑自行重新配置。启用在线 AI 会把待处理内容发送到你配置的服务。
+- 在“设置 → AI 清洗”中重新填写 API 密钥（旧密钥仍在钥匙串的 `com.local.PDFToMarkdown` 条目中，可手动删除）。
+- 旧版生成的输出目录可以用“替换已有结果”覆盖，但不能用“重新生成”（旧版没有保存 OCR 块）。
+- 旧版未完成任务的 `.failed-*` / `.staging-*` 目录不会被续跑，可以手动删除。
 
 ## 从源码构建
 
-安装完整 Xcode 和 [uv](https://docs.astral.sh/uv/getting-started/installation/)，然后执行：
+需要完整 Xcode（仅 Command Line Tools 不够，SwiftUI 宏依赖 Xcode）和 [uv](https://docs.astral.sh/uv/getting-started/installation/)：
 
 ```bash
-git clone https://github.com/jasperfarmer6-maker/scribeflow.git
+git clone https://github.com/atticuskk/scribeflow.git
 cd scribeflow
-git checkout backup-2026-09-05
 uv python install 3.12
 uv sync --frozen
-DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer uv run --frozen python macos/build_app.py
+DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer uv run --frozen python packaging/build_app.py
 ```
 
-若安装的是 Xcode beta，将 `DEVELOPER_DIR` 改为其实际路径。产物位于 `dist/ScribeFlow.app`；`--output` 可指定构建目录，`--python-runtime` 可指定独立运行时。构建不会删除 `/Applications` 中的应用，也不允许直接将构建输出设在该目录。
+构建脚本会：
 
-保持原技术身份：可执行文件 `PDFToMarkdown`、Bundle ID `com.local.PDFToMarkdown`，CLI 为 `pdf2md`，原环境变量 `PDF2MD_*` 继续有效。
+1. 用 SwiftPM 编译界面；
+2. 复制 uv 提供的独立 CPython 3.12 运行时（可用 `--python-runtime` 指定）；
+3. 按 `uv.lock` 安装 `scribeflow[ocr]` 及其依赖（不含开发工具），并用内置 Python 做一次启动检查；
+4. 收集依赖许可证，写入 `BuildInfo.json`（源码提交、版本、MinerU 版本）；
+5. ad-hoc 签名，最后把 `dist/ScribeFlow.app` 整体替换。
+
+构建不会触碰 `/Applications`，也不允许把输出目录设在那里。
+
+## 只用命令行
+
+```bash
+uv sync --frozen --extra ocr
+uv run scribeflow convert 输入.pdf -o 输出目录
+```
