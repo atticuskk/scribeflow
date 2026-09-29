@@ -1,35 +1,34 @@
-# Python virtual environments
+# Python
 .venv/
-
-# Python cache and build artifacts
 __pycache__/
 *.py[cod]
 *.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Swift / 构建产物
+app/.build/
+app/.swiftpm/
 build/
 dist/
 
 # macOS
 .DS_Store
 
-# Local inputs and generated outputs
+# 本地输入与输出（仓库只收录自带的样例 PDF）
 samples/*
 !samples/.gitkeep
 !samples/mineru_smoke_test.pdf
-output/*
-!output/.gitkeep
 /*.pdf
+*-Markdown/
+.*.scribeflow-work/
+.*.scribeflow-publish-*/
 
-# Non-public assessment materials and document-specific utilities
+# 非公开的评估材料
 /2027届基础精讲阶段-民法学-转换评估报告.md
 /scripts/split_corrected_civil_law.py
 /scripts/generate_pdf_assessment_report.py
 
-# Local logs, checkpoints, and application data
-*.log
-*.failed-*/
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
-
-# Local environment variables
+# 本地环境变量
 .env

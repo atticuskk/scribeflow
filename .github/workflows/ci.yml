@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  python:
+    name: Python（lint、类型检查、测试）
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+      - run: uv sync --frozen
+      - run: uv run --frozen ruff check .
+      - run: uv run --frozen ruff format --check .
+      - run: uv run --frozen mypy
+      - run: uv run --frozen pytest
+
+  swift:
+    name: macOS 应用（编译、测试）
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Swift 版本
+        run: swift --version
+      - name: 测试 ScribeFlowCore
+        working-directory: app
+        run: swift test
+      - name: 编译应用
+        working-directory: app
+        run: swift build -c release --arch arm64 --product ScribeFlow

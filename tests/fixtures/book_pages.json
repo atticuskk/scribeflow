@@ -1,0 +1,37 @@
+[
+  [
+    {"type": "header", "text": "民法学讲义", "bbox": [60, 20, 300, 40]},
+    {"type": "text", "text": "民法学基础讲义", "text_level": 1, "bbox": [100, 120, 500, 160]},
+    {"type": "text", "text": "本讲义用于课堂学习，内容以现行法律为准。", "bbox": [60, 200, 540, 240]},
+    {"type": "page_number", "text": "1", "bbox": [290, 800, 310, 815]}
+  ],
+  [
+    {"type": "header", "text": "民法学讲义", "bbox": [60, 20, 300, 40]},
+    {"type": "text", "text": "第一章 总则", "text_level": 1, "bbox": [60, 80, 300, 110]},
+    {"type": "text", "text": "民事主体从事民事活动，应当遵循自愿原则，按照自己的意思设立、变更、终止民事", "bbox": [60, 700, 540, 780]},
+    {"type": "page_footer", "text": "第 2 页", "bbox": [270, 800, 330, 815]}
+  ],
+  [
+    {"type": "header", "text": "民法学讲义", "bbox": [60, 20, 300, 40]},
+    {"type": "text", "text": "法律关系。", "bbox": [60, 60, 540, 80]},
+    {"type": "text", "text": "第一节 基本原则", "text_level": 2, "bbox": [60, 100, 300, 125]},
+    {"type": "text", "text": "The principle of good faith re-", "bbox": [60, 140, 540, 160]},
+    {"type": "text", "text": "quires parties to act honestly", "bbox": [60, 160, 540, 180]},
+    {"type": "text", "text": "and keep their promises.", "bbox": [60, 180, 540, 200]},
+    {"type": "text", "text": "广告：扫码关注公众号", "bbox": [60, 220, 540, 240]},
+    {"type": "image", "img_path": "images/principle.jpg", "image_caption": ["图 1-1 原则关系图"], "bbox": [100, 260, 500, 500]},
+    {"type": "text", "text": "- 3 -", "bbox": [280, 800, 320, 815]}
+  ],
+  [
+    {"type": "text", "text": "第二章 民事主体", "text_level": 1, "bbox": [60, 80, 300, 110]},
+    {"type": "table", "img_path": "images/table.jpg", "table_caption": ["表 2-1 民事行为能力"], "table_body": "<table><tr><td>年龄</td><td>能力</td></tr><tr><td>18 周岁以上</td><td>完全</td></tr></table>", "bbox": [60, 140, 540, 300]},
+    {"type": "equation", "text": "", "latex": "E = mc^2", "bbox": [200, 320, 400, 350]},
+    {"type": "text", "text": "自然人的民事权利能力一律平等。", "bbox": [60, 380, 540, 400]}
+  ],
+  [],
+  [
+    {"type": "text", "text": "第三章 物权", "text_level": 1, "bbox": [60, 80, 300, 110]},
+    {"type": "text", "text": "物权是权利人依法对特定的物享有直接支配和排他的权利。", "bbox": [60, 140, 540, 180]},
+    {"type": "image", "img_path": "images/untitled.jpg", "bbox": [100, 200, 500, 400]}
+  ]
+]
