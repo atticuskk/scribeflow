@@ -64,7 +64,13 @@ class Harness:
         return [json.loads(line) for line in path.read_text().splitlines()] if path.exists() else []
 
     def server_pids(self) -> list[int]:
-        path = self.state / "server-starts.txt"
+        return self._pids("server-starts.txt")
+
+    def server_children(self) -> list[int]:
+        return self._pids("server-children.txt")
+
+    def _pids(self, name: str) -> list[int]:
+        path = self.state / name
         return [int(pid) for pid in path.read_text().split()] if path.exists() else []
 
 
@@ -77,6 +83,16 @@ def alive(pid: int) -> bool:
         os.kill(pid, 0)
     except ProcessLookupError:
         return False
+    return True
+
+
+def any_alive(pids: list[int], *, within: float = 3.0) -> bool:
+    """给被结束的进程一点时间被回收，再判断是否仍有存活。"""
+    deadline = time.monotonic() + within
+    while time.monotonic() < deadline:
+        if not any(alive(pid) for pid in pids):
+            return False
+        time.sleep(0.05)
     return True
 
 
@@ -97,6 +113,7 @@ def test_convert_uses_one_shared_mineru_server(harness: Harness) -> None:
     assert {call["model_source"] for call in calls} == {"modelscope"}
     assert len(harness.server_pids()) == 1
     assert not alive(harness.server_pids()[0])
+    assert not any_alive(harness.server_children())
     graceful = harness.state / "server-graceful.txt"
     assert graceful.read_text().split() == [str(harness.server_pids()[0])]  # 通过关闭 stdin 正常退出
     assert "fake mineru client done" in stderr  # MinerU 输出进入日志（stderr）
@@ -115,6 +132,8 @@ def test_crashed_server_is_restarted_and_segment_retried(harness: Harness) -> No
     code, _, stderr = harness.run(FAKE_MINERU_KILL_SERVER="2")
     assert code == 0, stderr
     assert len(harness.server_pids()) == 2
+    assert len(harness.server_children()) == 2
+    assert not any_alive(harness.server_pids() + harness.server_children())  # 崩溃服务的同组子进程也被清理
     assert [Path(call["pdf"]).name for call in harness.client_calls()] == [
         "s001.pdf",
         "s002.pdf",
@@ -165,7 +184,7 @@ def test_sigterm_cancels_and_leaves_no_processes(harness: Harness) -> None:
     assert failed["event"] == "failed" and failed["code"] == "cancelled"
     time.sleep(0.2)
     assert not alive(client_pid)
-    assert not any(alive(pid) for pid in harness.server_pids())
+    assert not any_alive(harness.server_pids() + harness.server_children())
     assert not (harness.state / "server-graceful.txt").exists()  # 取消时立即结束，不等待正常退出
 
 

@@ -125,7 +125,7 @@ if os.environ.get("FAKE_MINERU_KILL_SERVER") == str(index) and not kill_marker.e
     import signal
     kill_marker.write_text("x")
     server_pid = int((state / "server-starts.txt").read_text().split()[-1])
-    os.killpg(server_pid, signal.SIGKILL)
+    os.kill(server_pid, signal.SIGKILL)  # 只杀服务主进程，同组子进程会残留
     print(f"Failed to query task status for {args.p}: 502 Bad Gateway", flush=True)
     sys.exit(3)
 sleep = float(os.environ.get("FAKE_MINERU_SLEEP", "0"))
@@ -156,6 +156,11 @@ args = parser.parse_args()
 state = Path(os.environ["FAKE_MINERU_STATE"])
 with (state / "server-starts.txt").open("a") as log:
     log.write(f"{os.getpid()}\n")
+# 模拟 multiprocessing 的 resource_tracker：与服务同一进程组，服务被强杀时不会自行退出
+import subprocess, sys
+child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(600)"])
+with (state / "server-children.txt").open("a") as log:
+    log.write(f"{child.pid}\n")
 
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
@@ -172,6 +177,8 @@ if os.environ.get("MINERU_API_SHUTDOWN_ON_STDIN_EOF") == "1":
     def watch_stdin():
         sys.stdin.read()
         (state / "server-graceful.txt").open("a").write(f"{os.getpid()}\n")
+        child.terminate()  # 正常退出时自己清理子进程
+        child.wait()
         server.shutdown()
 
     threading.Thread(target=watch_stdin, daemon=True).start()

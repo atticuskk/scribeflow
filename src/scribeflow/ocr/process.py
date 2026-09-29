@@ -35,20 +35,32 @@ def popen_group(command: Sequence[str], *, env: dict[str, str], stdin_pipe: bool
 
 
 def terminate_group(process: subprocess.Popen[str], *, grace_seconds: float = 3.0) -> None:
-    """立即结束整个进程组：先 SIGTERM，宽限期后 SIGKILL。用于取消和异常路径。"""
+    """立即结束整个进程组：先 SIGTERM，宽限期后 SIGKILL。用于取消、出错和服务崩溃后的清理。
 
-    if process.poll() is not None:
-        return
+    即使组长进程已经退出（例如服务被外部杀死），组内其他成员（如 resource_tracker）
+    仍可能存活，所以始终以进程组为单位检查和发送信号。
+    """
+
+    pgid = process.pid
     for sig, wait in ((signal.SIGTERM, grace_seconds), (signal.SIGKILL, 3.0)):
-        try:
-            os.killpg(process.pid, sig)
-        except ProcessLookupError:
+        process.poll()  # 回收已退出的组长，避免僵尸进程被当作存活成员
+        if not _group_alive(pgid):
             return
-        try:
-            process.wait(timeout=wait)
+        with contextlib.suppress(ProcessLookupError):
+            os.killpg(pgid, sig)
+        if _wait_group(process, wait):
             return
-        except subprocess.TimeoutExpired:
-            continue
+
+
+def _wait_group(process: subprocess.Popen[str], timeout: float) -> bool:
+    deadline = time.monotonic() + timeout
+    while True:
+        process.poll()
+        if not _group_alive(process.pid):
+            return True
+        if time.monotonic() >= deadline:
+            return False
+        time.sleep(0.05)
 
 
 def _group_alive(pgid: int) -> bool:
@@ -73,12 +85,8 @@ def close_gracefully(process: subprocess.Popen[str], *, timeout: float = 30.0, d
     except subprocess.TimeoutExpired:
         terminate_group(process)
         return
-    deadline = time.monotonic() + drain
-    while _group_alive(process.pid) and time.monotonic() < deadline:
-        time.sleep(0.1)
-    if _group_alive(process.pid):
-        with contextlib.suppress(ProcessLookupError):
-            os.killpg(process.pid, signal.SIGKILL)
+    if not _wait_group(process, drain):
+        terminate_group(process, grace_seconds=0.5)
 
 
 def run_streaming(
@@ -105,7 +113,10 @@ def run_streaming(
                 on_line(line)
         return ProcessResult(process.wait(), tuple(tail))
     finally:
-        terminate_group(process)
+        if process.poll() is None:  # 被取消或出错：立即结束
+            terminate_group(process)
+        elif not _wait_group(process, 5.0):  # 正常退出：给同组子进程时间自行收尾
+            terminate_group(process, grace_seconds=0.5)
 
 
 def pump_output(process: subprocess.Popen[str], logger: logging.Logger, prefix: str) -> threading.Thread:
