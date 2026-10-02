@@ -38,7 +38,7 @@ flowchart LR
 | `workspace.py` | 未完成任务的状态文件、分段块、日志 |
 | `converter.py` | `convert` 与 `reprocess` 两个流程、原子发布 |
 | `events.py` | 进度事件与 JSON Lines 输出 |
-| `cli.py` | 参数解析、SIGTERM → 取消 |
+| `cli.py` | 参数解析、SIGTERM → 取消；`--events jsonl` 模式下父进程（GUI）消失也视为取消 |
 
 ### 转换流程
 
@@ -84,12 +84,13 @@ MinerU 3.4.4 的 `mineru` 命令在没有 `--api-url` 时，每次都会启动�
 `app/` 是一个 SwiftPM 包：
 
 - `ScribeFlowCore`（只依赖 Foundation）：事件解码、`BackendCommand` 参数构造、`BackendProcess`（stdout 事件 / stderr 日志 / 退出码，取消时 SIGTERM，20 秒后 SIGKILL）、`ConversionProgress`（纯值类型的状态机）。
+- 退出应用时若有任务在运行，`AppDelegate` 先取消任务、等后端退出再退出，进度会保存以便续跑。应用被强制结束时没有机会这样做，由后端发现父进程消失后自行取消（`cli.py`），避免后端和 MinerU 留在后台占用内存。
 - `ScribeFlow`（SwiftUI）：`AppModel` 连接界面与后端进程；偏好用 `@AppStorage`，API 密钥用钥匙串。
 
 应用包内的 Python 位于 `Contents/Resources/runtime/python`，依赖位于 `runtime/site-packages`。开发时设置环境变量 `SCRIBEFLOW_PYTHON=<仓库>/.venv/bin/python` 后 `swift run`，即可用源码中的后端运行界面。
 
 ## 测试
 
-- `tests/test_cli.py`：以子进程运行真实 CLI，并用伪造的 `mineru` / `mineru-api` 程序覆盖共享服务、服务崩溃重启、失败续跑、SIGTERM 取消（确认不留下子进程）。
+- `tests/test_cli.py`：以子进程运行真实 CLI，并用伪造的 `mineru` / `mineru-api` 程序覆盖共享服务、服务崩溃重启、失败续跑、SIGTERM 取消、GUI 被强制结束（确认不留下子进程）。
 - `tests/test_converter.py`：进程内伪造引擎；`tests/fixtures/expected/` 是 6 页样例书的期望输出。清洗或渲染行为有意改变时，用 `UPDATE_GOLDEN=1 uv run pytest tests/test_converter.py` 更新并检查差异。
 - `app/Tests`（swift-testing，只装 Command Line Tools 也能运行 `swift test`）：协议解码、命令参数、行缓冲、状态机、进程运行与取消。

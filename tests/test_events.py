@@ -55,3 +55,14 @@ def test_json_lines_sink_writes_one_line_per_event() -> None:
     lines = stream.getvalue().splitlines()
     assert len(lines) == len(EVENTS)
     assert "民法" in lines[1]  # 不转义中文
+
+
+class BrokenPipe(io.StringIO):
+    def write(self, text: str) -> int:
+        raise BrokenPipeError
+
+
+def test_json_lines_sink_ignores_closed_reader() -> None:
+    sink = JsonLinesSink(BrokenPipe())
+    for event in EVENTS:  # GUI 已退出时丢弃事件，不打断取消和清理
+        sink.emit(event)

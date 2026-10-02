@@ -104,10 +104,16 @@ class NullSink:
 class JsonLinesSink:
     def __init__(self, stream: TextIO | None = None) -> None:
         self._stream = stream or sys.stdout
+        self._closed = False
 
     def emit(self, event: Event) -> None:
-        self._stream.write(json.dumps(to_json(event), ensure_ascii=False) + "\n")
-        self._stream.flush()
+        if self._closed:
+            return
+        try:
+            self._stream.write(json.dumps(to_json(event), ensure_ascii=False) + "\n")
+            self._stream.flush()
+        except (BrokenPipeError, ValueError):  # GUI 已退出，读端关闭：丢弃事件，不打断清理流程
+            self._closed = True
 
 
 class RecordingSink:

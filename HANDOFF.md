@@ -118,7 +118,7 @@ open /Users/luliss/Documents/scribeflow/dist/ScribeFlow.app
 
 同步后未重新做 dist 签名校验和启动冒烟（dist 未变）。启动冒烟只验证进程未提前退出，未人工验证窗口交互或执行真实 OCR。Python 端到端测试使用伪造 MinerU，不能替代真实模型压力测试。
 
-现有 dist 应用 BuildInfo：0.2.0、build 202609300552、源码提交 `03cae80`、arm64、最低 macOS 15.0、内置 Python 3.12.14、MinerU 3.4.4；模型未打包。**dist 应用早于 `1c9d9ac`，不含进程组清理修复**；本轮未重新打包，需要时运行 `packaging/build_app.py` 重建。
+现有 dist 应用 BuildInfo：0.2.0、build 202609300552、源码提交 `03cae80`、arm64、最低 macOS 15.0、内置 Python 3.12.14、MinerU 3.4.4；模型未打包。**dist 应用早于 `1c9d9ac`，不含进程组清理修复，也不含之后的优化（见 CHANGELOG“未发布”）**；需要时运行 `packaging/build_app.py` 重建。
 
 ## 6. 待办：卡顿和高内存（用户决定暂缓）
 
@@ -137,4 +137,4 @@ open /Users/luliss/Documents/scribeflow/dist/ScribeFlow.app
 
 ## 7. 给接管模型的指令
 
-请以 `/Users/luliss/Documents/scribeflow` 为工作目录，先阅读 HANDOFF.md 和架构文档，检查 Git 状态。迁移已经完成，不要再次改名或搬迁；保留本交接文档。性能排查已由用户暂缓，未经要求不要运行高内存任务。不要把历史文档中的功能描述等同于真实 OCR 验收，不要将未运行的检查记为通过。本文件尚未提交，应随下一次合适的提交纳入版本控制。
+请以 `/Users/luliss/Documents/scribeflow` 为工作目录，先阅读 HANDOFF.md 和架构文档，检查 Git 状态。迁移已经完成，不要再次改名或搬迁；保留本交接文档。性能排查已由用户暂缓，未经要求不要运行高内存任务。不要把历史文档中的功能描述等同于真实 OCR 验收，不要将未运行的检查记为通过。本文件已纳入版本控制，状态变化时请同步更新。

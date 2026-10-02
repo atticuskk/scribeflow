@@ -188,6 +188,38 @@ def test_sigterm_cancels_and_leaves_no_processes(harness: Harness) -> None:
     assert not (harness.state / "server-graceful.txt").exists()  # 取消时立即结束，不等待正常退出
 
 
+LAUNCHER = """
+import subprocess, sys
+child = subprocess.Popen(sys.argv[1:], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+print(child.pid, flush=True)
+child.wait()
+"""
+
+
+def test_backend_stops_when_gui_dies(harness: Harness) -> None:
+    """GUI 被强制结束（不会发送 SIGTERM）时，后端应自行取消，不留下 MinerU 进程。"""
+    gui = subprocess.Popen(
+        [sys.executable, "-c", LAUNCHER, *harness.command()],
+        env={**harness.env, "FAKE_MINERU_SLEEP": "60"},
+        stdout=subprocess.PIPE,
+        text=True,
+    )
+    assert gui.stdout is not None
+    backend_pid = int(gui.stdout.readline())
+    pid_file = harness.state / "client.pid"
+    deadline = time.monotonic() + 30
+    while not pid_file.exists() and time.monotonic() < deadline:
+        time.sleep(0.1)
+    assert pid_file.exists(), "fake mineru client never started"
+    client_pid = int(pid_file.read_text())
+    gui.kill()
+    gui.wait()
+    assert not any_alive([backend_pid], within=15), "GUI 退出后后端仍在运行"
+    assert not any_alive([client_pid, *harness.server_pids(), *harness.server_children()])
+    job = json.loads((harness.output.parent / ".book-Markdown.scribeflow-work" / "job.json").read_text())
+    assert job["last_error"] == "任务已取消。"  # 进度已保存，可以续跑
+
+
 def test_ai_without_configuration_fails_fast(harness: Harness) -> None:
     env = {"SCRIBEFLOW_AI_API_KEY": "", "OPENAI_API_KEY": "", "SCRIBEFLOW_AI_MODEL": "", "OPENAI_MODEL": ""}
     code, events, _ = harness.run("--ai", **env)

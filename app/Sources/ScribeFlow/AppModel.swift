@@ -17,6 +17,7 @@ final class AppModel {
     private var process: BackendProcess?
     private var lastCommand: BackendCommand?
     private var openWhenDone = false
+    private var onBackendExit: (() -> Void)?
     private static let maxLogLines = 3000
 
     var proposedOutput: URL? {
@@ -108,6 +109,15 @@ final class AppModel {
         process.cancel()
     }
 
+    /// 退出应用前停止正在运行的后端，后端退出（必要时被强制结束）后调用 `done`。
+    /// 没有正在运行的任务时返回 false，可以立即退出。
+    func stopBeforeQuit(_ done: @escaping () -> Void) -> Bool {
+        guard let process, process.isRunning else { return false }
+        onBackendExit = done
+        if progress.phase != .cancelling { cancel() }
+        return true
+    }
+
     private func withOptions(_ body: (ConversionOptions) -> Void) {
         do {
             body(try Preferences.conversionOptions())
@@ -153,6 +163,8 @@ final class AppModel {
         case let .exited(status):
             progress.processExited(status: status)
             process = nil
+            onBackendExit?()
+            onBackendExit = nil
         }
     }
 

@@ -6,9 +6,12 @@ GUI 通过 ``--events jsonl`` 调用同样的命令：事件写 stdout，日志�
 from __future__ import annotations
 
 import argparse
+import logging
 import os
 import signal
 import sys
+import threading
+import time
 from pathlib import Path
 from types import FrameType
 
@@ -88,13 +91,31 @@ def _cleaning(args: argparse.Namespace) -> CleaningSettings:
 
 
 def _raise_cancelled(signum: int, frame: FrameType | None) -> None:
+    signal.signal(signal.SIGTERM, signal.SIG_IGN)  # 只取消一次：再次收到 SIGTERM 不能打断正在进行的清理
     raise Cancelled()
+
+
+def _cancel_when_parent_exits(interval: float = 0.5) -> None:
+    """GUI 被强制结束时不会发来 SIGTERM，后端会变成孤儿进程继续占用内存。
+    父进程一变就给自己发 SIGTERM，走与“停止”按钮相同的取消流程。"""
+
+    parent = os.getppid()
+
+    def watch() -> None:
+        while os.getppid() == parent:
+            time.sleep(interval)
+        logging.getLogger("scribeflow").warning("界面已退出，停止任务")
+        os.kill(os.getpid(), signal.SIGTERM)
+
+    threading.Thread(target=watch, name="parent-watch", daemon=True).start()
 
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     configure_console()
     signal.signal(signal.SIGTERM, _raise_cancelled)
+    if args.events == "jsonl":  # 由 GUI 启动；终端里用 nohup 等方式后台运行时不受影响
+        _cancel_when_parent_exits()
     sink: EventSink = JsonLinesSink() if args.events == "jsonl" else NullSink()
     try:
         cleaning = _cleaning(args)
