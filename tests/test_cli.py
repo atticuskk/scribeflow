@@ -121,6 +121,14 @@ def test_convert_uses_one_shared_mineru_server(harness: Harness) -> None:
     assert diagnostics["values"]["服务"].startswith("http://127.0.0.1:")
 
 
+def test_progress_bar_redraws_are_not_logged_one_by_one(harness: Harness) -> None:
+    code, _, stderr = harness.run(FAKE_MINERU_PROGRESS="500")
+    assert code == 0, stderr
+    progress = [line for line in stderr.splitlines() if "OCR-rec Predict" in line]
+    assert any("100%" in line for line in progress)
+    assert len(progress) <= 2 * 3  # 3 段，每段最多“开始 + 完成”两行，而不是 500 多次重绘
+
+
 def test_per_segment_mode_does_not_start_server(harness: Harness) -> None:
     code, _, stderr = harness.run("--no-shared-server")
     assert code == 0, stderr

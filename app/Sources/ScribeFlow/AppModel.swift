@@ -10,7 +10,7 @@ final class AppModel {
     var inputPDF: URL?
     var outputParent: URL?
     private(set) var progress = ConversionProgress()
-    private(set) var logLines: [String] = []
+    private(set) var log = LogBuffer(capacity: 3000)
     private(set) var lastOutput: URL?
     var alertMessage: String?
 
@@ -18,7 +18,9 @@ final class AppModel {
     private var lastCommand: BackendCommand?
     private var openWhenDone = false
     private var onBackendExit: (() -> Void)?
-    private static let maxLogLines = 3000
+    /// 日志先攒在这里，每 0.2 秒并入 `log` 一次：后端输出很密时，界面不必逐行刷新。
+    @ObservationIgnored private var pendingLog: [String] = []
+    @ObservationIgnored private var logFlushScheduled = false
 
     var proposedOutput: URL? {
         guard let inputPDF, let outputParent else { return nil }
@@ -128,7 +130,8 @@ final class AppModel {
 
     private func run(_ command: BackendCommand) {
         guard !progress.isActive else { return }
-        logLines = []
+        log.removeAll()
+        pendingLog.removeAll()
         lastCommand = command
         openWhenDone = UserDefaults.standard.bool(forKey: Preferences.openWhenDone)
         progress.begin(message: "正在启动…")
@@ -156,16 +159,31 @@ final class AppModel {
                 if openWhenDone { NSWorkspace.shared.open(url) }
             }
         case let .log(line):
-            logLines.append(line)
-            if logLines.count > Self.maxLogLines {
-                logLines.removeFirst(logLines.count - Self.maxLogLines)
-            }
+            pendingLog.append(line)
+            scheduleLogFlush()
         case let .exited(status):
+            flushLog()
             progress.processExited(status: status)
             process = nil
             onBackendExit?()
             onBackendExit = nil
         }
+    }
+
+    private func scheduleLogFlush() {
+        guard !logFlushScheduled else { return }
+        logFlushScheduled = true
+        Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(200))
+            self?.flushLog()
+        }
+    }
+
+    private func flushLog() {
+        logFlushScheduled = false
+        guard !pendingLog.isEmpty else { return }
+        log.append(contentsOf: pendingLog)
+        pendingLog.removeAll()
     }
 
     // MARK: 打开文件

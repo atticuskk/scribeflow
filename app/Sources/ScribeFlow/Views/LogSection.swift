@@ -5,16 +5,15 @@ struct LogSection: View {
     @State private var expanded = false
 
     var body: some View {
-        if !model.logLines.isEmpty {
-            DisclosureGroup("运行日志（\(model.logLines.count) 行）", isExpanded: $expanded) {
+        if !model.log.lines.isEmpty {
+            DisclosureGroup("运行日志（最近 \(model.log.lines.count) 行）", isExpanded: $expanded) {
                 ScrollViewReader { proxy in
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: 1) {
-                            ForEach(Array(model.logLines.enumerated()), id: \.offset) { index, line in
-                                Text(line)
+                            ForEach(model.log.lines) { line in
+                                Text(line.text)
                                     .font(.system(.caption, design: .monospaced))
                                     .frame(maxWidth: .infinity, alignment: .leading)
-                                    .id(index)
                             }
                         }
                         .textSelection(.enabled)
@@ -23,8 +22,9 @@ struct LogSection: View {
                     .frame(height: 220)
                     .background(Color.secondary.opacity(0.06))
                     .clipShape(RoundedRectangle(cornerRadius: 8))
-                    .onChange(of: model.logLines.count) { _, count in
-                        proxy.scrollTo(count - 1, anchor: .bottom)
+                    // 跟随最后一行的 id 而不是行数：日志满 3000 行后行数不再变化，仍要滚到底部
+                    .onChange(of: model.log.lines.last?.id) { _, id in
+                        if let id { proxy.scrollTo(id, anchor: .bottom) }
                     }
                 }
             }

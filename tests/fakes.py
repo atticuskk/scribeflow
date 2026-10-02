@@ -132,6 +132,13 @@ sleep = float(os.environ.get("FAKE_MINERU_SLEEP", "0"))
 if sleep:
     (state / "client.pid").write_text(str(os.getpid()))
     time.sleep(sleep)
+progress = int(os.environ.get("FAKE_MINERU_PROGRESS", "0"))
+for done in range(progress + 1 if progress else 0):  # 模拟 tqdm：用 \r 原地重绘，结束时重复输出最后一行
+    bar = "█" * (10 * done // progress)
+    line = f"OCR-rec Predict: {100 * done // progress:3d}%|{bar:10}| {done}/{progress} [00:00<00:00, 99.0it/s]"
+    print("\r" + line, end="", flush=True)
+if progress:
+    print(f"\rOCR-rec Predict: 100%|{'█' * 10}| {progress}/{progress} [00:00<00:00, 99.0it/s]", flush=True)
 fail_marker = state / f"failed-{index}"
 if os.environ.get("FAKE_MINERU_FAIL") == str(index) and not fail_marker.exists():
     fail_marker.write_text("x")

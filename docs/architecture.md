@@ -30,7 +30,7 @@ flowchart LR
 | `ocr/engine.py` | `OcrEngine` 协议、`OcrSettings`、`SegmentJob` |
 | `ocr/mineru.py` | MinerU 适配器：服务生命周期、客户端调用、错误分类、崩溃重试 |
 | `ocr/mineru_format.py` | MinerU `content_list` → Block，复制图片 |
-| `ocr/process.py` | 子进程在独立进程组中运行，取消时整组终止 |
+| `ocr/process.py` | 子进程在独立进程组中运行，取消时整组终止；过滤 tqdm 进度条的逐次重绘 |
 | `cleaning/operations.py` | 操作类型、校验执行、审计 |
 | `cleaning/rules.py` | 确定性规则（每条规则一个类） |
 | `cleaning/ai.py` | AI 规划器、响应解析、按内容哈希缓存 |
@@ -61,6 +61,7 @@ MinerU 3.4.4 的 `mineru` 命令在没有 `--api-url` 时，每次都会启动�
 - 客户端输出 `Failed to query task status`，或服务进程已退出时，重启服务并重试该分段一次。
 - 客户端输出 `Timed out waiting for result of task` 时报 `ocr_timeout`。单段超时默认 `max(3600, 300 × 页数)` 秒；设置了 `MINERU_TASK_RESULT_TIMEOUT_SECONDS` 时以它为准。
 - `--no-shared-server` 退回每段临时服务的旧行为。
+- MinerU 的输出逐行写入日志。tqdm 进度条约每 0.1 秒用 `\r` 重绘一次，读取时每次重绘都是一行；`ProgressFilter` 对每个进度条只保留第一行、完成行和每 10 秒一行中间进度，其他输出原样保留。
 
 ## 事件协议
 
@@ -85,7 +86,7 @@ MinerU 3.4.4 的 `mineru` 命令在没有 `--api-url` 时，每次都会启动�
 
 - `ScribeFlowCore`（只依赖 Foundation）：事件解码、`BackendCommand` 参数构造、`BackendProcess`（stdout 事件 / stderr 日志 / 退出码，取消时 SIGTERM，20 秒后 SIGKILL）、`ConversionProgress`（纯值类型的状态机）。
 - 退出应用时若有任务在运行，`AppDelegate` 先取消任务、等后端退出再退出，进度会保存以便续跑。应用被强制结束时没有机会这样做，由后端发现父进程消失后自行取消（`cli.py`），避免后端和 MinerU 留在后台占用内存。
-- `ScribeFlow`（SwiftUI）：`AppModel` 连接界面与后端进程；偏好用 `@AppStorage`，API 密钥用钥匙串。
+- `ScribeFlow`（SwiftUI）：`AppModel` 连接界面与后端进程，日志每 0.2 秒批量并入 `LogBuffer`（最近 3000 行，行 id 稳定）；偏好用 `@AppStorage`，API 密钥用钥匙串。
 
 应用包内的 Python 位于 `Contents/Resources/runtime/python`，依赖位于 `runtime/site-packages`。开发时设置环境变量 `SCRIBEFLOW_PYTHON=<仓库>/.venv/bin/python` 后 `swift run`，即可用源码中的后端运行界面。
 

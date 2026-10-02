@@ -5,6 +5,7 @@ from __future__ import annotations
 import contextlib
 import logging
 import os
+import re
 import signal
 import subprocess
 import threading
@@ -12,6 +13,34 @@ import time
 from collections import deque
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+
+PROGRESS_RE = re.compile(r"^(?P<label>.*?):?\s*(?P<percent>\d{1,3})%\|")
+
+
+class ProgressFilter:
+    """MinerU 的 tqdm 进度条约每 0.1 秒用 ``\\r`` 重绘一次，读取时每次重绘都是单独一行，
+    全部写进日志会让日志文件膨胀、界面频繁刷新。每个进度条只保留第一行、完成行，
+    以及中间每隔 ``interval`` 秒一行；其他输出原样保留。"""
+
+    def __init__(self, interval: float = 10.0, clock: Callable[[], float] = time.monotonic) -> None:
+        self._interval = interval
+        self._clock = clock
+        self._last: dict[str, tuple[float, str]] = {}
+
+    def keep(self, line: str) -> bool:
+        match = PROGRESS_RE.match(line)
+        if match is None:
+            return True
+        label = match["label"].strip()
+        now = self._clock()
+        last = self._last.get(label)
+        if last is not None:
+            if line == last[1]:  # tqdm 结束时会重复输出最后一行
+                return False
+            if match["percent"] != "100" and now - last[0] < self._interval:
+                return False
+        self._last[label] = (now, line)
+        return True
 
 
 @dataclass(frozen=True, slots=True)
@@ -100,6 +129,7 @@ def run_streaming(
     """运行命令，逐行写日志；无论正常结束还是被取消，都不留下子进程。"""
 
     tail: deque[str] = deque(maxlen=20)
+    progress = ProgressFilter()
     process = popen_group(command, env=env)
     try:
         assert process.stdout is not None
@@ -107,10 +137,11 @@ def run_streaming(
             line = raw.rstrip()
             if not line:
                 continue
-            tail.append(line)
-            logger.info("%s | %s", prefix, line)
             if on_line is not None:
                 on_line(line)
+            if progress.keep(line):
+                tail.append(line)
+                logger.info("%s | %s", prefix, line)
         return ProcessResult(process.wait(), tuple(tail))
     finally:
         if process.poll() is None:  # 被取消或出错：立即结束
@@ -124,9 +155,10 @@ def pump_output(process: subprocess.Popen[str], logger: logging.Logger, prefix: 
 
     def pump() -> None:
         assert process.stdout is not None
+        progress = ProgressFilter()
         for raw in process.stdout:
             line = raw.rstrip()
-            if line:
+            if line and progress.keep(line):
                 logger.info("%s | %s", prefix, line)
 
     thread = threading.Thread(target=pump, name=f"{prefix}-output", daemon=True)
